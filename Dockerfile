@@ -1,6 +1,6 @@
-FROM amazoncorretto:26-alpine
+FROM amazoncorretto:26
 
-RUN apk add --no-cache curl gcompat netcat-openbsd
+RUN yum install -y nmap-ncat shadow-utils && yum clean all
 
 ARG FABRIC_LOADER=0.19.2
 ARG MINECRAFT_VERSION=26.1.2
@@ -10,7 +10,7 @@ ENV FABRIC_LOADER=${FABRIC_LOADER} \
     MINECRAFT_VERSION=${MINECRAFT_VERSION} \
     INSTALLER_VERSION=${INSTALLER_VERSION}
 
-RUN adduser -D -h /usr/local/minecraft minecraft
+RUN useradd -d /usr/local/minecraft -m minecraft
 
 WORKDIR /usr/local/minecraft
 
@@ -24,12 +24,7 @@ USER minecraft
 EXPOSE 25565
 VOLUME /usr/local/minecraft
 
-ARG HC_INTERVAL=30s
-ARG HC_TIMEOUT=10s
-ARG HC_START_PERIOD=300s
-ARG HC_RETRIES=3
-
-HEALTHCHECK --interval=${HC_INTERVAL} --timeout=${HC_TIMEOUT} --start-period=${HC_START_PERIOD} --retries=${HC_RETRIES} \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=300s --retries=3 \
     CMD nc -z localhost 25565 || exit 1
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

@@ -5,13 +5,54 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    - cron: '0 6 * * *'
   workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
 
 jobs:
+  check-versions:
+    runs-on: ubuntu-latest
+    outputs:
+      minecraft: ${{ steps.resolve.outputs.minecraft }}
+      loader: ${{ steps.resolve.outputs.loader }}
+      installer: ${{ steps.resolve.outputs.installer }}
+      changed: ${{ steps.cache-check.outputs.cache-hit != 'true' }}
+      hash: ${{ steps.resolve.outputs.hash }}
+    steps:
+      - id: resolve
+        run: |
+          MINECRAFT=$(curl -fsSL https://meta.fabricmc.net/v2/versions/game | \
+            jq -r 'first(.[] | select(.stable == true)) | .version')
+          LOADER=$(curl -fsSL "https://meta.fabricmc.net/v2/versions/loader/${MINECRAFT}" | \
+            jq -r 'first(.[] | select(.loader.stable == true)) | .loader.version')
+          INSTALLER="1.1.1"
+
+          HASH=$(echo "${MINECRAFT}|${LOADER}" | sha256sum | cut -d' ' -f1)
+
+          echo "Latest Minecraft:   ${MINECRAFT}"
+          echo "Latest Fabric:      ${LOADER}"
+          echo "Version hash:       ${HASH}"
+
+          echo "minecraft=${MINECRAFT}" >> "$GITHUB_OUTPUT"
+          echo "loader=${LOADER}" >> "$GITHUB_OUTPUT"
+          echo "installer=${INSTALLER}" >> "$GITHUB_OUTPUT"
+          echo "hash=${HASH}" >> "$GITHUB_OUTPUT"
+
+          mkdir -p /tmp/version-cache
+          echo "${MINECRAFT}|${LOADER}" > /tmp/version-cache/stamp
+
+      - uses: actions/cache/restore@v4
+        id: cache-check
+        with:
+          path: /tmp/version-cache
+          key: versions-${{ steps.resolve.outputs.hash }}
+
   test:
+    needs: check-versions
+    if: needs.check-versions.outputs.changed == 'true' || github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,7 +60,12 @@ jobs:
         run: bash tests/test_entrypoint.sh
 
   build:
-    needs: test
+    needs: [check-versions, test]
+    if: |
+      always() &&
+      needs.check-versions.result == 'success' &&
+      (needs.check-versions.outputs.changed == 'true' || github.event_name != 'schedule') &&
+      (needs.test.result == 'success' || needs.test.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -48,6 +94,7 @@ jobs:
             type=ref,event=pr
             type=sha,prefix=
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=${{ needs.check-versions.outputs.minecraft }}-fabric-${{ needs.check-versions.outputs.loader }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -56,5 +103,22 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            MINECRAFT_VERSION=${{ needs.check-versions.outputs.minecraft }}
+            FABRIC_LOADER=${{ needs.check-versions.outputs.loader }}
+            INSTALLER_VERSION=${{ needs.check-versions.outputs.installer }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Create cache stamp
+        if: github.event_name == 'schedule' && github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p /tmp/version-cache
+          echo "${{ needs.check-versions.outputs.minecraft }}|${{ needs.check-versions.outputs.loader }}" > /tmp/version-cache/stamp
+
+      - name: Save version cache
+        if: github.event_name == 'schedule' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/version-cache
+          key: versions-${{ needs.check-versions.outputs.hash }}
