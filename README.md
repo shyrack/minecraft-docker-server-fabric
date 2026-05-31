@@ -25,6 +25,12 @@ docker run -d \
 
 Place your Fabric mod `.jar` files in a local `./mods/` directory and bind-mount it with `-v ./mods:/usr/local/minecraft/mods` at runtime (as shown above). Add or remove mods on the host and restart the container to apply changes.
 
+## Tests
+
+```bash
+bash tests/test_entrypoint.sh
+```
+
 ## Issues
 
 Found a bug or have a suggestion? Please [open an issue](https://github.com/shyrack/minecraft-docker-server-fabric/issues).
