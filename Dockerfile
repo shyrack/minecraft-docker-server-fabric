@@ -1,6 +1,6 @@
-FROM amazoncorretto:26
+FROM amazoncorretto:26-alpine
 
-RUN yum install -y nmap-ncat shadow-utils && yum clean all
+RUN apk add --no-cache bash curl gcompat netcat-openbsd
 
 ARG FABRIC_LOADER=0.19.2
 ARG MINECRAFT_VERSION=26.1.2
@@ -10,7 +10,7 @@ ENV FABRIC_LOADER=${FABRIC_LOADER} \
     MINECRAFT_VERSION=${MINECRAFT_VERSION} \
     INSTALLER_VERSION=${INSTALLER_VERSION}
 
-RUN useradd -d /usr/local/minecraft -m minecraft
+RUN adduser -D -h /usr/local/minecraft minecraft
 
 WORKDIR /usr/local/minecraft
 
