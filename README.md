@@ -48,15 +48,3 @@ This project is not affiliated with, endorsed by, or sponsored by Mojang AB,
 Microsoft Corporation, or the FabricMC project. "Minecraft" is a registered
 trademark of Mojang AB.
 
-## Privacy / DSGVO
-
-Running a Minecraft server processes personal data (IP addresses, usernames,
-chat messages, etc.). As the server operator, you are the data controller
-(Art. 4 Nr. 7 DSGVO) and should:
-
-- Inform players about what data you collect and why
-- Establish a legal basis for processing (Art. 6 DSGVO)
-- Respect data subject rights (access, deletion, rectification)
-- Consider minimizing log retention
-
-This project does not collect or process any user data itself.
