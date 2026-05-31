@@ -1,7 +1,7 @@
 FROM amazoncorretto:26-alpine
 
-RUN apk upgrade --no-cache && \
-    apk add --no-cache bash curl gcompat netcat-openbsd
+RUN apk add --no-cache bash curl gcompat netcat-openbsd && \
+    apk upgrade --no-cache
 
 ARG FABRIC_LOADER=0.19.2
 ARG MINECRAFT_VERSION=26.1.2
