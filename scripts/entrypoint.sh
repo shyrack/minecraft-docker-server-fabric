@@ -1,6 +1,7 @@
-#!/bin/sh
+#!/bin/bash
 set -eu
 
+# shellcheck source=scripts/runtime-functions.sh
 . "$(dirname "$0")/runtime-functions.sh"
 
 if [ "${MINECRAFT_VERSION}" = "latest" ] || [ "${FABRIC_LOADER}" = "latest" ] || [ "${INSTALLER_VERSION}" = "latest" ]; then
@@ -61,6 +62,7 @@ fi
 
 JAVA_MEM_ARGS="-Xms${HEAP_SIZE} -Xmx${HEAP_SIZE}"
 
+# shellcheck disable=SC2086
 exec java \
     ${JAVA_MEM_ARGS} \
     -XX:+AlwaysPreTouch \

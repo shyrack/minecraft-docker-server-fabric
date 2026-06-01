@@ -33,6 +33,7 @@ assert_code() {
 # Sourced from the shared runtime-functions.sh (single source of truth)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/runtime-functions.sh
 source "${SCRIPT_DIR}/../scripts/runtime-functions.sh"
 
 echo "=== parse_mb ==="

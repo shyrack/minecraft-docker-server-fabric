@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Pure functions shared between entrypoint.sh and the test suite.
 # Sourcing this file has no side effects; it only defines functions.
 # Override the cgroup paths via arguments to test without real /sys access.
