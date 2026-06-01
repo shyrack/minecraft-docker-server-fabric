@@ -1,4 +1,4 @@
-FROM amazoncorretto:26-alpine
+FROM eclipse-temurin:26-jdk-alpine
 
 USER root
 
