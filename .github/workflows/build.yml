@@ -22,33 +22,48 @@ jobs:
       changed: ${{ steps.cache-check.outputs.cache-hit != 'true' }}
       hash: ${{ steps.resolve.outputs.hash }}
     steps:
+      - uses: actions/checkout@v4
+
       - id: resolve
         run: |
-          MINECRAFT=$(curl -fsSL https://meta.fabricmc.net/v2/versions/game | \
-            jq -r 'first(.[] | select(.stable == true)) | .version')
-          LOADER=$(curl -fsSL "https://meta.fabricmc.net/v2/versions/loader/${MINECRAFT}" | \
-            jq -r 'first(.[] | select(.loader.stable == true)) | .loader.version')
-          INSTALLER="1.1.1"
+          source scripts/version-resolve.sh
 
-          HASH=$(echo "${MINECRAFT}|${LOADER}" | sha256sum | cut -d' ' -f1)
+          HASH=$(echo "${MINECRAFT_VERSION}|${FABRIC_LOADER}" | sha256sum | cut -d' ' -f1)
 
-          echo "Latest Minecraft:   ${MINECRAFT}"
-          echo "Latest Fabric:      ${LOADER}"
+          echo "Latest Minecraft:   ${MINECRAFT_VERSION}"
+          echo "Latest Fabric:      ${FABRIC_LOADER}"
           echo "Version hash:       ${HASH}"
 
-          echo "minecraft=${MINECRAFT}" >> "$GITHUB_OUTPUT"
-          echo "loader=${LOADER}" >> "$GITHUB_OUTPUT"
-          echo "installer=${INSTALLER}" >> "$GITHUB_OUTPUT"
+          echo "minecraft=${MINECRAFT_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "loader=${FABRIC_LOADER}" >> "$GITHUB_OUTPUT"
+          echo "installer=${INSTALLER_VERSION}" >> "$GITHUB_OUTPUT"
           echo "hash=${HASH}" >> "$GITHUB_OUTPUT"
 
           mkdir -p /tmp/version-cache
-          echo "${MINECRAFT}|${LOADER}" > /tmp/version-cache/stamp
+          echo "${MINECRAFT_VERSION}|${FABRIC_LOADER}" > /tmp/version-cache/stamp
 
       - uses: actions/cache/restore@v4
         id: cache-check
         with:
           path: /tmp/version-cache
           key: versions-${{ steps.resolve.outputs.hash }}
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run shellcheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: '.'
+          format: tty
+          check_together: 'yes'
+
+      - name: Run hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
 
   test:
     needs: check-versions

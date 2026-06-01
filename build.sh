@@ -3,25 +3,20 @@ set -euo pipefail
 
 echo "Checking latest stable Fabric + Minecraft versions..."
 
-MINECRAFT=$(curl -fsSL https://meta.fabricmc.net/v2/versions/game | \
-  jq -r 'first(.[] | select(.stable == true)) | .version')
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/scripts/version-resolve.sh"
 
-LOADER=$(curl -fsSL "https://meta.fabricmc.net/v2/versions/loader/${MINECRAFT}" | \
-  jq -r 'first(.[] | select(.loader.stable == true)) | .loader.version')
-
-INSTALLER="${INSTALLER_VERSION:-1.1.1}"
-
-echo "  Minecraft:        ${MINECRAFT}"
-echo "  Fabric Loader:    ${LOADER}"
-echo "  Fabric Installer: ${INSTALLER}"
+echo "  Minecraft:        ${MINECRAFT_VERSION}"
+echo "  Fabric Loader:    ${FABRIC_LOADER}"
+echo "  Fabric Installer: ${INSTALLER_VERSION}"
 
 TAG_BASE="${IMAGE_NAME:-minecraft-fabric}"
-VERSION_ID="${MINECRAFT}-fabric-${LOADER}"
+VERSION_ID="${MINECRAFT_VERSION}-fabric-${FABRIC_LOADER}"
 
 exec docker build \
-  --build-arg "MINECRAFT_VERSION=${MINECRAFT}" \
-  --build-arg "FABRIC_LOADER=${LOADER}" \
-  --build-arg "INSTALLER_VERSION=${INSTALLER}" \
+  --build-arg "MINECRAFT_VERSION=${MINECRAFT_VERSION}" \
+  --build-arg "FABRIC_LOADER=${FABRIC_LOADER}" \
+  --build-arg "INSTALLER_VERSION=${INSTALLER_VERSION}" \
   -t "${TAG_BASE}:${VERSION_ID}" \
   -t "${TAG_BASE}:latest" \
   "${@}" \

@@ -30,15 +30,10 @@ assert_code() {
 # ==========================================================
 # 1. parse_mb
 # ==========================================================
-# Exact copy of the function from entrypoint.sh
+# Sourced from the shared runtime-functions.sh (single source of truth)
 
-parse_mb() {
-    case "$1" in
-        *[Gg]) echo $(( ${1%[Gg]} * 1024 )) ;;
-        *[Mm]) echo "${1%[Mm]}" ;;
-        *)     echo $(( $1 / 1048576 )) ;;
-    esac
-}
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/../scripts/runtime-functions.sh"
 
 echo "=== parse_mb ==="
 assert_eq "2G → 2048 MB"           2048 "$(parse_mb "2G")"
@@ -55,28 +50,10 @@ echo
 # ==========================================================
 # 2. read_limit_mb
 # ==========================================================
-# Tests the algorithm with configurable filesystem paths.
-# The actual function in entrypoint.sh uses hardcoded /sys/fs/cgroup
-# paths; this parameterized version tests identical logic.
+# Tests the shared read_limit_mb function with custom filesystem paths.
+# The function accepts optional cgroup path overrides for testing.
 
 echo "=== read_limit_mb ==="
-
-read_limit_mb_param() {
-    # $1 = path to cgroup v2 memory.max (or /nonexistent)
-    # $2 = path to cgroup v1 memory.limit_in_bytes (or /nonexistent)
-    # $3 = path to meminfo file (or /nonexistent for real /proc/meminfo)
-    local cgv2="$1" cgv1="$2" meminfo="$3"
-
-    if [ -f "$cgv2" ]; then
-        read -r val < "$cgv2"
-        [ "$val" != "max" ] && echo $(( val / 1048576 )) && return
-    fi
-    if [ -f "$cgv1" ]; then
-        read -r val < "$cgv1"
-        [ "$val" -lt 9223372036854771712 ] 2>/dev/null && echo $(( val / 1048576 )) && return
-    fi
-    awk '/MemTotal/ {print int($2 / 1024)}' "$meminfo"
-}
 
 TMP="$(mktemp -d)"
 cleanup() { rm -rf "$TMP"; }
@@ -92,27 +69,25 @@ EOF
 
 echo "2147483648" > "$TMP/cgv2_val"
 assert_eq "cgroup v2: 2 GiB limit → 2048 MB" 2048 \
-    "$(read_limit_mb_param "$TMP/cgv2_val" "/nonexistent" "$TMP/meminfo")"
+    "$(read_limit_mb "$TMP/cgv2_val" "/nonexistent" "$TMP/meminfo")"
 
 echo "max" > "$TMP/cgv2_max"
 echo "4294967296" > "$TMP/cgv1"
 assert_eq "cgroup v2 'max' → falls back to v1 4 GiB → 4096 MB" 4096 \
-    "$(read_limit_mb_param "$TMP/cgv2_max" "$TMP/cgv1" "$TMP/meminfo")"
+    "$(read_limit_mb "$TMP/cgv2_max" "$TMP/cgv1" "$TMP/meminfo")"
 
 assert_eq "cgroup v1 only: 4 GiB → 4096 MB" 4096 \
-    "$(read_limit_mb_param "/nonexistent" "$TMP/cgv1" "$TMP/meminfo")"
+    "$(read_limit_mb "/nonexistent" "$TMP/cgv1" "$TMP/meminfo")"
 
 assert_eq "no cgroups → fallback to /proc/meminfo 16 GB → 16000 MB" 16000 \
-    "$(read_limit_mb_param "/nonexistent" "/nonexistent" "$TMP/meminfo")"
+    "$(read_limit_mb "/nonexistent" "/nonexistent" "$TMP/meminfo")"
 
-# cgroup v1 unlimited value (max int64-ish) should be treated as "no limit", fallback to meminfo
 echo "9223372036854771712" > "$TMP/cgv1_unlimited"
 assert_eq "cgroup v1 unlimited → fallback to meminfo" 16000 \
-    "$(read_limit_mb_param "/nonexistent" "$TMP/cgv1_unlimited" "$TMP/meminfo")"
+    "$(read_limit_mb "/nonexistent" "$TMP/cgv1_unlimited" "$TMP/meminfo")"
 
-# cgroup v2 max + cgroup v2 (for the fallback) but v1 unlimited → meminfo fallback
 assert_eq "cgroup v2 max+v1 unlimited → meminfo 16 GB" 16000 \
-    "$(read_limit_mb_param "$TMP/cgv2_max" "$TMP/cgv1_unlimited" "$TMP/meminfo")"
+    "$(read_limit_mb "$TMP/cgv2_max" "$TMP/cgv1_unlimited" "$TMP/meminfo")"
 echo
 
 # ==========================================================
