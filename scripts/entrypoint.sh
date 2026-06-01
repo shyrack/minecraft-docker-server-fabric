@@ -53,6 +53,7 @@ if [ -n "$SERVER_JAR" ]; then
         -XX:+AlwaysPreTouch \
         -XX:+DisableExplicitGC \
         -XX:+PerfDisableSharedMem \
+        -XX:+UnlockExperimentalVMOptions \
         -XX:G1HeapRegionSize=8M \
         -XX:G1HeapWastePercent=5 \
         -XX:G1MaxNewSizePercent=40 \
@@ -73,6 +74,7 @@ else
         -XX:+AlwaysPreTouch \
         -XX:+DisableExplicitGC \
         -XX:+PerfDisableSharedMem \
+        -XX:+UnlockExperimentalVMOptions \
         -XX:G1HeapRegionSize=8M \
         -XX:G1HeapWastePercent=5 \
         -XX:G1MaxNewSizePercent=40 \
