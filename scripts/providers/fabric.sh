@@ -17,29 +17,29 @@ provider_resolve_version() {
 }
 
 provider_download_server() {
-    if [ -f fabric-server.jar ]; then
+    if [ -f server.jar ]; then
         return 0
     fi
-    echo "Downloading fabric-server.jar..."
+    echo "Downloading server.jar..."
     for i in 1 2 3; do
-        wget -T 30 -O fabric-server.jar \
+        wget -T 30 -O server.jar \
             "https://meta.fabricmc.net/v2/versions/loader/${MINECRAFT_VERSION}/${FABRIC_LOADER}/${FABRIC_INSTALLER}/server/jar" \
             && break
         echo "Download attempt $i failed, retrying..."
         sleep 5
     done
-    if [ ! -s fabric-server.jar ]; then
-        echo "ERROR: Failed to download fabric-server.jar after 3 attempts" >&2
+    if [ ! -s server.jar ]; then
+        echo "ERROR: Failed to download server.jar after 3 attempts" >&2
         return 1
     fi
-    if ! head -c 2 fabric-server.jar | grep -q 'PK'; then
+    if ! head -c 2 server.jar | grep -q 'PK'; then
         echo "ERROR: Downloaded file does not appear to be a valid ZIP/JAR" >&2
         return 1
     fi
 }
 
 provider_get_jar() {
-    echo "fabric-server.jar"
+    echo "server.jar"
 }
 
 provider_get_launch_args() {

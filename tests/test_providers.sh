@@ -74,7 +74,7 @@ test_fabric_pinned() {
 test_fabric_jar() {
     local jar
     jar=$(bash -c 'source "'"$PROVIDERS"'/fabric.sh" > /dev/null 2>&1; provider_get_jar')
-    assert_eq "JAR name is fabric-server.jar" "fabric-server.jar" "$jar"
+    assert_eq "JAR name is server.jar" "server.jar" "$jar"
 }
 
 test_fabric_launch_args() {
