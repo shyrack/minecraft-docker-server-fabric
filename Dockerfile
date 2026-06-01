@@ -2,6 +2,7 @@ FROM amazoncorretto:26-alpine
 
 USER root
 
+# hadolint ignore=DL3018
 RUN apk add --no-cache bash gcompat netcat-openbsd && \
     apk upgrade --no-cache
 
