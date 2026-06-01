@@ -17,8 +17,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       minecraft: ${{ steps.resolve.outputs.minecraft }}
-      loader: ${{ steps.resolve.outputs.loader }}
-      installer: ${{ steps.resolve.outputs.installer }}
       changed: ${{ steps.cache-check.outputs.cache-hit != 'true' }}
       hash: ${{ steps.resolve.outputs.hash }}
     steps:
@@ -28,25 +26,22 @@ jobs:
         run: |
           source scripts/version-resolve.sh
 
-          HASH=$(echo "${MINECRAFT_VERSION}|${FABRIC_LOADER}" | sha256sum | cut -d' ' -f1)
+          HASH=$(echo "${MINECRAFT_VERSION}" | sha256sum | cut -d' ' -f1)
 
-          echo "Latest Minecraft:   ${MINECRAFT_VERSION}"
-          echo "Latest Fabric:      ${FABRIC_LOADER}"
-          echo "Version hash:       ${HASH}"
+          echo "Latest Minecraft: ${MINECRAFT_VERSION}"
+          echo "Version hash:     ${HASH}"
 
           echo "minecraft=${MINECRAFT_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "loader=${FABRIC_LOADER}" >> "$GITHUB_OUTPUT"
-          echo "installer=${INSTALLER_VERSION}" >> "$GITHUB_OUTPUT"
           echo "hash=${HASH}" >> "$GITHUB_OUTPUT"
 
           mkdir -p /tmp/version-cache
-          echo "${MINECRAFT_VERSION}|${FABRIC_LOADER}" > /tmp/version-cache/stamp
+          echo "${MINECRAFT_VERSION}" > /tmp/version-cache/stamp
 
       - uses: actions/cache/restore@v4
         id: cache-check
         with:
           path: /tmp/version-cache
-          key: versions-${{ steps.resolve.outputs.hash }}
+          key: minecraft-version-${{ steps.resolve.outputs.hash }}
 
   lint:
     runs-on: ubuntu-latest
@@ -72,7 +67,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run unit tests
-        run: bash tests/test_entrypoint.sh
+        run: bash tests/test_entrypoint.sh && bash tests/test_providers.sh
 
   build:
     needs: [check-versions, test]
@@ -109,7 +104,7 @@ jobs:
             type=ref,event=pr
             type=sha,prefix=
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            type=raw,value=${{ needs.check-versions.outputs.minecraft }}-fabric-${{ needs.check-versions.outputs.loader }}
+            type=raw,value=${{ needs.check-versions.outputs.minecraft }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -120,8 +115,6 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             MINECRAFT_VERSION=${{ needs.check-versions.outputs.minecraft }}
-            FABRIC_LOADER=${{ needs.check-versions.outputs.loader }}
-            INSTALLER_VERSION=${{ needs.check-versions.outputs.installer }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -129,11 +122,11 @@ jobs:
         if: github.event_name == 'schedule' && github.ref == 'refs/heads/main'
         run: |
           mkdir -p /tmp/version-cache
-          echo "${{ needs.check-versions.outputs.minecraft }}|${{ needs.check-versions.outputs.loader }}" > /tmp/version-cache/stamp
+          echo "${{ needs.check-versions.outputs.minecraft }}" > /tmp/version-cache/stamp
 
       - name: Save version cache
         if: github.event_name == 'schedule' && github.ref == 'refs/heads/main'
         uses: actions/cache/save@v4
         with:
           path: /tmp/version-cache
-          key: versions-${{ needs.check-versions.outputs.hash }}
+          key: minecraft-version-${{ needs.check-versions.outputs.hash }}

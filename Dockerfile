@@ -3,16 +3,13 @@ FROM amazoncorretto:26-alpine
 USER root
 
 # hadolint ignore=DL3018
-RUN apk add --no-cache bash gcompat netcat-openbsd && \
+RUN apk add --no-cache bash gcompat jq netcat-openbsd && \
     apk upgrade --no-cache
 
-ARG FABRIC_LOADER=latest
 ARG MINECRAFT_VERSION=latest
-ARG INSTALLER_VERSION=latest
 
-ENV FABRIC_LOADER=${FABRIC_LOADER} \
-    MINECRAFT_VERSION=${MINECRAFT_VERSION} \
-    INSTALLER_VERSION=${INSTALLER_VERSION}
+ENV MINECRAFT_VERSION=${MINECRAFT_VERSION} \
+    SERVER_TYPE=fabric
 
 RUN adduser -D -h /usr/local/minecraft minecraft
 
@@ -20,9 +17,11 @@ WORKDIR /usr/local/minecraft
 
 COPY scripts/runtime-functions.sh /usr/local/bin/runtime-functions.sh
 COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY scripts/providers/ /usr/local/bin/providers/
 
 RUN chmod +x /usr/local/bin/entrypoint.sh && \
-    chown -R minecraft:minecraft /usr/local/minecraft /usr/local/bin/entrypoint.sh /usr/local/bin/runtime-functions.sh
+    chmod +x /usr/local/bin/providers/*.sh && \
+    chown -R minecraft:minecraft /usr/local/minecraft /usr/local/bin
 
 USER minecraft
 
