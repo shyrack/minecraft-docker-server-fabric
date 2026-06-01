@@ -1,5 +1,7 @@
 FROM amazoncorretto:26-alpine
 
+USER root
+
 RUN apk add --no-cache bash gcompat netcat-openbsd && \
     apk upgrade --no-cache
 
@@ -26,12 +28,7 @@ USER minecraft
 EXPOSE 25565
 VOLUME /usr/local/minecraft
 
-ARG HC_INTERVAL=30s
-ARG HC_TIMEOUT=10s
-ARG HC_START_PERIOD=300s
-ARG HC_RETRIES=3
-
-HEALTHCHECK --interval=${HC_INTERVAL} --timeout=${HC_TIMEOUT} --start-period=${HC_START_PERIOD} --retries=${HC_RETRIES} \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=300s --retries=3 \
     CMD nc -z localhost 25565 || exit 1
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

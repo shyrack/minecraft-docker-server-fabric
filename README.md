@@ -117,18 +117,18 @@ Found a bug or have a suggestion? Please [open an issue](https://github.com/shyr
 
 ### Healthcheck
 
-Tune the container healthcheck via build-time arguments. These apply at build time only.
+The image includes a `HEALTHCHECK` with sensible defaults. To override them, use the `--health-*` flags at container run time (or the equivalent in docker-compose):
 
-| Build Argument     | Default  | Description                          |
-|--------------------|----------|--------------------------------------|
-| `HC_INTERVAL`      | `30s`    | Interval between health checks       |
-| `HC_TIMEOUT`       | `10s`    | Health check command timeout         |
-| `HC_START_PERIOD`  | `300s`   | Grace period before first check      |
-| `HC_RETRIES`       | `3`      | Consecutive failures before unhealthy |
+| Flag                     | Default | Description                          |
+|--------------------------|---------|--------------------------------------|
+| `--health-interval`      | `30s`   | Interval between health checks       |
+| `--health-timeout`       | `10s`   | Health check command timeout         |
+| `--health-start-period`  | `300s`  | Grace period before first check      |
+| `--health-retries`       | `3`     | Consecutive failures before unhealthy |
 
 Example:
 ```bash
-docker build --build-arg HC_START_PERIOD=600s --build-arg HC_INTERVAL=60s …
+docker run -d … --health-start-period=600s --health-interval=60s …
 ```
 
 ## Security
