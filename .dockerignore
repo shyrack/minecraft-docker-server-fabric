@@ -1,3 +1,9 @@
 .git
+.github/
+.opencode/
 *.md
 LICENSE
+build.sh
+tests/
+*.jar
+
