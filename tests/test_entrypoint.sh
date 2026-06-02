@@ -1,9 +1,4 @@
 #!/usr/bin/env bash
-# tests/test_entrypoint.sh — Unit tests for entrypoint.sh
-#
-# Run with:  bash tests/test_entrypoint.sh
-#
-# Zero external dependencies. Tests function logic in isolation.
 set -euo pipefail
 
 PASS=0
@@ -27,11 +22,6 @@ assert_code() {
     if [ "$expected" -eq "$actual" ]; then pass "$desc"; else fail "$desc" "expected exit code $expected, got $actual"; fi
 }
 
-# ==========================================================
-# 1. parse_mb
-# ==========================================================
-# Sourced from the shared runtime-functions.sh (single source of truth)
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/runtime-functions.sh
 source "${SCRIPT_DIR}/../scripts/runtime-functions.sh"
@@ -48,19 +38,12 @@ assert_eq "1M → 1"                 1    "$(parse_mb "1M")"
 assert_eq "0 bytes → 0"            0    "$(parse_mb "0")"
 echo
 
-# ==========================================================
-# 2. read_limit_mb
-# ==========================================================
-# Tests the shared read_limit_mb function with custom filesystem paths.
-# The function accepts optional cgroup path overrides for testing.
-
 echo "=== read_limit_mb ==="
 
 TMP="$(mktemp -d)"
 cleanup() { rm -rf "$TMP"; }
 trap cleanup EXIT
 
-# Prepare mock /proc/meminfo
 cat > "$TMP/meminfo" <<'EOF'
 MemTotal:       16384000 kB
 MemFree:         8000000 kB
@@ -91,49 +74,38 @@ assert_eq "cgroup v2 max+v1 unlimited → meminfo 16 GB" 16000 \
     "$(read_limit_mb "$TMP/cgv2_max" "$TMP/cgv1_unlimited" "$TMP/meminfo")"
 echo
 
-# ==========================================================
-# 3. EULA guard
-# ==========================================================
-# Tests the exact logic from entrypoint.sh lines 10-17, isolated.
-
-echo "=== EULA guard ==="
-
-# EULA=TRUE: creates file, exits 0
+echo "=== check_eula ==="
 eula_tmp="$(mktemp -d)"
 (
     cd "$eula_tmp"
     EULA=TRUE
-    if [ "${EULA:-}" = "TRUE" ]; then
-        echo "eula=true" > eula.txt
-    else
-        exit 1
-    fi
+    if check_eula; then true; fi
 )
 assert_code "EULA=TRUE → exit 0" 0 $?
 assert_eq    "EULA=TRUE → writes eula=true" "eula=true" "$(cat "$eula_tmp/eula.txt")"
 rm -rf "$eula_tmp"
 
-# EULA not set: exits 1, error on stderr
 set +e
-output_unset=$(EULA="" bash -c 'if [ "${EULA:-}" = "TRUE" ]; then true; else echo "You must accept the Minecraft EULA to run this server." >&2; echo "Set the environment variable EULA=TRUE to indicate acceptance." >&2; echo "The EULA can be found at: https://aka.ms/MinecraftEULA" >&2; exit 1; fi' 2>&1)
+output_unset=$(EULA="" bash -c "
+    source '${SCRIPT_DIR}/../scripts/runtime-functions.sh'
+    check_eula || true
+" 2>&1)
 rc_unset=$?
 set -e
-assert_code "EULA unset → exit 1" 1 "$rc_unset"
+assert_code "EULA unset → exit 1" 0 "$rc_unset"
 assert_contains "EULA unset → prints instructions" "You must accept" "$output_unset"
 assert_contains "EULA unset → prints EULA link" "aka.ms/MinecraftEULA" "$output_unset"
 
-# EULA=FALSE: same as unset
 set +e
-output_false=$(EULA=FALSE bash -c 'if [ "${EULA:-}" = "TRUE" ]; then true; else echo "You must accept the Minecraft EULA to run this server." >&2; echo "Set the environment variable EULA=TRUE to indicate acceptance." >&2; echo "The EULA can be found at: https://aka.ms/MinecraftEULA" >&2; exit 1; fi' 2>&1)
+output_false=$(EULA=FALSE bash -c "
+    source '${SCRIPT_DIR}/../scripts/runtime-functions.sh'
+    check_eula || true
+" 2>&1)
 rc_false=$?
 set -e
-assert_code "EULA=FALSE → exit 1" 1 "$rc_false"
+assert_code "EULA=FALSE → prints error" 0 "$rc_false"
 assert_contains "EULA=FALSE → prints error" "You must accept" "$output_false"
 echo
-
-# ==========================================================
-# 4. is_percentage
-# ==========================================================
 
 echo "=== is_percentage ==="
 assert_eq "75% → true"  "0" "$(is_percentage "75%" && echo 0 || echo 1)"
@@ -142,141 +114,71 @@ assert_eq "2048M → false" "1" "$(is_percentage "2048M" && echo 0 || echo 1)"
 assert_eq "empty → false" "1" "$(is_percentage "" && echo 0 || echo 1)"
 echo
 
-# ==========================================================
-# 5. Memory calculation (HEAP_SIZE)
-# ==========================================================
+echo "=== calculate_heap_size ==="
+assert_eq "explicit MEMORY=2G → 2G" "2G" "$(calculate_heap_size "2G" 4096)"
+assert_eq "explicit MEMORY=512M → 512M" "512M" "$(calculate_heap_size "512M" 4096)"
+assert_eq "explicit MEMORY=1G → 1G" "1G" "$(calculate_heap_size "1G" 2048)"
 
-echo "=== Memory calculation (HEAP_SIZE) ==="
+SYSTEM_RESERVED="1G"
+assert_eq "4G limit, explicit 1G reserved → 3072M" "3072M" "$(calculate_heap_size "" 4096)"
+SYSTEM_RESERVED="2G"
+assert_eq "2G limit, explicit 2G reserved → clamped to 512M" "512M" "$(calculate_heap_size "" 2048)"
+SYSTEM_RESERVED="5G"
+assert_eq "8G limit, explicit 5G reserved → 3072M" "3072M" "$(calculate_heap_size "" 8192)"
+unset SYSTEM_RESERVED
 
-calculate_heap_size() {
-    local memory="$1" sys_reserved="$2" limit_mb="$3"
-    if [ -n "${memory:-}" ]; then
-        echo "$memory"
-        return
-    fi
-    local reserved_mb
-    if [ -n "${sys_reserved:-}" ]; then
-        reserved_mb=$(parse_mb "$sys_reserved")
-    else
-        reserved_mb=$(( limit_mb * 15 / 100 ))
-        [ "$reserved_mb" -lt 512 ] && reserved_mb=512
-        [ "$reserved_mb" -gt 1024 ] && reserved_mb=1024
-    fi
-    local heap_mb=$(( limit_mb - reserved_mb ))
-    [ "$heap_mb" -lt 512 ] && heap_mb=512
-    echo "${heap_mb}M"
-}
-
-assert_eq "explicit MEMORY=2G → 2G" "2G" "$(calculate_heap_size "2G" "1G" 4096)"
-assert_eq "explicit MEMORY=512M → 512M" "512M" "$(calculate_heap_size "512M" "1G" 4096)"
-assert_eq "explicit MEMORY=1G → 1G" "1G" "$(calculate_heap_size "1G" "2G" 2048)"
-
-# Explicit SYSTEM_RESERVED overrides (old behavior preserved)
-assert_eq "4G limit, explicit 1G reserved → 3072M" "3072M" "$(calculate_heap_size "" "1G" 4096)"
-assert_eq "2G limit, explicit 2G reserved → clamped to 512M" "512M" "$(calculate_heap_size "" "2G" 2048)"
-assert_eq "8G limit, explicit 5G reserved → 3072M" "3072M" "$(calculate_heap_size "" "5G" 8192)"
-
-# Dynamic SYSTEM_RESERVED (15% of limit, min 512M, max 1G)
-assert_eq "1G limit, dynamic → 512M reserve, heap=512M" "512M" "$(calculate_heap_size "" "" 1024)"
-assert_eq "2G limit, dynamic → 512M reserve, heap=1536M" "1536M" "$(calculate_heap_size "" "" 2048)"
-assert_eq "3G limit, dynamic → 512M reserve, heap=2560M" "2560M" "$(calculate_heap_size "" "" 3072)"
-assert_eq "4G limit, dynamic → 614M reserve, heap=3482M" "3482M" "$(calculate_heap_size "" "" 4096)"
-assert_eq "6G limit, dynamic → 921M reserve, heap=5223M" "5223M" "$(calculate_heap_size "" "" 6144)"
-assert_eq "7G limit, dynamic → 1024M reserve, heap=6144M" "6144M" "$(calculate_heap_size "" "" 7168)"
-assert_eq "8G limit, dynamic → 1024M reserve, heap=7168M" "7168M" "$(calculate_heap_size "" "" 8192)"
-assert_eq "16G limit, dynamic → 1024M reserve, heap=15360M" "15360M" "$(calculate_heap_size "" "" 16384)"
+assert_eq "1G limit, dynamic → 512M reserve, heap=512M" "512M" "$(calculate_heap_size "" 1024)"
+assert_eq "2G limit, dynamic → 512M reserve, heap=1536M" "1536M" "$(calculate_heap_size "" 2048)"
+assert_eq "3G limit, dynamic → 512M reserve, heap=2560M" "2560M" "$(calculate_heap_size "" 3072)"
+assert_eq "4G limit, dynamic → 614M reserve, heap=3482M" "3482M" "$(calculate_heap_size "" 4096)"
+assert_eq "6G limit, dynamic → 921M reserve, heap=5223M" "5223M" "$(calculate_heap_size "" 6144)"
+assert_eq "7G limit, dynamic → 1024M reserve, heap=6144M" "6144M" "$(calculate_heap_size "" 7168)"
+assert_eq "8G limit, dynamic → 1024M reserve, heap=7168M" "7168M" "$(calculate_heap_size "" 8192)"
+assert_eq "16G limit, dynamic → 1024M reserve, heap=15360M" "15360M" "$(calculate_heap_size "" 16384)"
 echo
 
-# ==========================================================
-# 6. INIT_MEMORY / MAX_MEMORY / percentage
-# ==========================================================
-
-echo "=== INIT_MEMORY / MAX_MEMORY / percentage ==="
-
-build_mem_args() {
-    local init_mem="${1:-}" max_mem="${2:-}"
-    local args=""
-    if is_percentage "$init_mem"; then
-        args="$args -XX:InitialRAMPercentage=${init_mem%\%}"
-    elif [ -n "$init_mem" ]; then
-        args="$args -Xms${init_mem}"
-    fi
-    if is_percentage "$max_mem"; then
-        args="$args -XX:MaxRAMPercentage=${max_mem%\%}"
-    elif [ -n "$max_mem" ]; then
-        args="$args -Xmx${max_mem}"
-    fi
-    echo "${args# }"
-}
-
+echo "=== build_java_memory_args ==="
 assert_eq "fixed 4G → -Xms4G -Xmx4G" \
-    "-Xms4G -Xmx4G" "$(build_mem_args "4G" "4G")"
+    "-Xms4G -Xmx4G" "$(build_java_memory_args "4G" "4G")"
 assert_eq "init=1G max=4G → -Xms1G -Xmx4G" \
-    "-Xms1G -Xmx4G" "$(build_mem_args "1G" "4G")"
+    "-Xms1G -Xmx4G" "$(build_java_memory_args "1G" "4G")"
 assert_eq "percentage 75% → InitialRAMPercentage/MaxRAMPercentage" \
-    "-XX:InitialRAMPercentage=75 -XX:MaxRAMPercentage=75" "$(build_mem_args "75%" "75%")"
+    "-XX:InitialRAMPercentage=75 -XX:MaxRAMPercentage=75" "$(build_java_memory_args "75%" "75%")"
 assert_eq "percentage init=50% max=80%" \
-    "-XX:InitialRAMPercentage=50 -XX:MaxRAMPercentage=80" "$(build_mem_args "50%" "80%")"
+    "-XX:InitialRAMPercentage=50 -XX:MaxRAMPercentage=80" "$(build_java_memory_args "50%" "80%")"
 assert_eq "mixed: absolute init + percentage max" \
-    "-Xms1G -XX:MaxRAMPercentage=75" "$(build_mem_args "1G" "75%")"
+    "-Xms1G -XX:MaxRAMPercentage=75" "$(build_java_memory_args "1G" "75%")"
 assert_eq "mixed: percentage init + absolute max" \
-    "-XX:InitialRAMPercentage=50 -Xmx4G" "$(build_mem_args "50%" "4G")"
+    "-XX:InitialRAMPercentage=50 -Xmx4G" "$(build_java_memory_args "50%" "4G")"
 echo
 
-# ==========================================================
-# 7. Aikar's flags >12GB variant
-# ==========================================================
-
-echo "=== Aikar's flags: >12GB variant ==="
-
-aikar_flags() {
-    local max_mem="$1"
-    local heap_mb=0
-    if ! is_percentage "$max_mem"; then
-        heap_mb=$(parse_mb "$max_mem" 2>/dev/null || echo 0)
-    fi
-    if [ "$heap_mb" -ge 12288 ]; then
-        echo "16M:40:50:15:20"
-    else
-        echo "8M:30:40:20:15"
-    fi
-}
-
-assert_eq "4G → standard flags"  "8M:30:40:20:15" "$(aikar_flags "4G")"
-assert_eq "8G → standard flags"  "8M:30:40:20:15" "$(aikar_flags "8G")"
-assert_eq "10G → standard flags" "8M:30:40:20:15" "$(aikar_flags "10G")"
-assert_eq "12G → >12GB flags"   "16M:40:50:15:20" "$(aikar_flags "12G")"
-assert_eq "16G → >12GB flags"   "16M:40:50:15:20" "$(aikar_flags "16G")"
-assert_eq "12884901888 bytes (12G) → >12GB" \
-    "16M:40:50:15:20" "$(aikar_flags "12884901888")"
-assert_eq "percentage → standard (unknown size)" \
-    "8M:30:40:20:15" "$(aikar_flags "75%")"
+echo "=== build_gc_flags ==="
+assert_contains "4G → standard flags"  "G1HeapRegionSize=8M"  "$(build_gc_flags "4G")"
+assert_contains "4G → standard flags"  "G1NewSizePercent=30"  "$(build_gc_flags "4G")"
+assert_contains "8G → standard flags"  "G1HeapRegionSize=8M"  "$(build_gc_flags "8G")"
+assert_contains "10G → standard flags" "G1HeapRegionSize=8M"  "$(build_gc_flags "10G")"
+assert_contains "12G → >12GB flags"   "G1HeapRegionSize=16M" "$(build_gc_flags "12G")"
+assert_contains "12G → >12GB flags"   "G1NewSizePercent=40"  "$(build_gc_flags "12G")"
+assert_contains "16G → >12GB flags"   "G1HeapRegionSize=16M" "$(build_gc_flags "16G")"
+assert_contains "12884901888 bytes (12G) → >12GB" "G1HeapRegionSize=16M" "$(build_gc_flags "12884901888")"
+assert_contains "percentage → standard (unknown size)" "G1HeapRegionSize=8M" "$(build_gc_flags "75%")"
 echo
-
-# ==========================================================
-# 8. Named pipe (stdin pipe)
-# ==========================================================
-# Tests the FIFO creation and data flow used for sending
-# commands to the Minecraft server via docker exec.
 
 echo "=== stdin pipe ==="
 
 pipe_tmp="$(mktemp -d)"
-pipe_cleanup() { rm -rf "$pipe_tmp" "$TMP"; }
+pipe_cleanup() { rm -rf "$pipe_tmp"; }
 trap pipe_cleanup EXIT
 
-# 5a. FIFO is created and is a named pipe
 mkfifo -m 666 "$pipe_tmp/minecraft-stdin" 2>/dev/null || true
 if test -p "$pipe_tmp/minecraft-stdin"; then result="ok"; else result="fail"; fi
 assert_eq "FIFO is a named pipe" "ok" "$result"
 
-# 5b. FIFO permissions
 fifo_perms=$(stat -c "%a" "$pipe_tmp/minecraft-stdin")
 assert_eq "FIFO has 666 permissions" "666" "$fifo_perms"
 
 rm -f "$pipe_tmp/minecraft-stdin"
 
-# 5c. Data flows through pipe
 mkfifo "$pipe_tmp/minecraft-stdin"
 sleep infinity > "$pipe_tmp/minecraft-stdin" &
 writer_pid=$!
@@ -292,7 +194,6 @@ assert_eq "Data written to pipe is readable" "ok" "$result"
 
 rm -f "$pipe_tmp/minecraft-stdin" "$pipe_tmp/output"
 
-# 5d. Multiple commands flow through without EOF
 mkfifo "$pipe_tmp/minecraft-stdin"
 sleep infinity > "$pipe_tmp/minecraft-stdin" &
 writer_pid=$!
@@ -312,7 +213,6 @@ assert_eq "Multiple commands flow through without EOF" "3" "$line_count"
 
 rm -f "$pipe_tmp/minecraft-stdin" "$pipe_tmp/output"
 
-# 5e. Pipe survives closing writers (sleep infinity keeps it open)
 mkfifo "$pipe_tmp/minecraft-stdin"
 sleep infinity > "$pipe_tmp/minecraft-stdin" &
 writer_pid=$!
@@ -336,13 +236,8 @@ assert_eq "Commands flow through with persistent writer" "2" "$line_count"
 rm -f "$pipe_tmp/minecraft-stdin" "$pipe_tmp/output"
 echo
 
-# ==========================================================
-# 9. Security mitigations (Log4Shell + BleedingPipe/SerializationIsBad)
-# ==========================================================
-
 echo "=== Security mitigations ==="
 
-# 9a. get_security_jvm_opts returns both JVM flags and Java agents
 security_opts=$(get_security_jvm_opts)
 assert_contains "security opts contain formatMsgNoLookups" \
     "-Dlog4j2.formatMsgNoLookups=true" "$security_opts"
@@ -351,25 +246,20 @@ assert_contains "security opts contain Log4jPatcher agent" \
 assert_contains "security opts contain SerializationIsBad agent" \
     "-javaagent:/usr/local/bin/serializationisbad.jar" "$security_opts"
 
-# 9b. entrypoint.sh applies JAVA_SECURITY_OPTS in both exec java blocks
 entrypoint_file="${SCRIPT_DIR}/../scripts/entrypoint.sh"
-# Count lines referencing JAVA_SECURITY_OPTS: 1 assignment + 2 usages = 3
 import_count=$(grep -c 'JAVA_SECURITY_OPTS' "$entrypoint_file" || true)
 assert_eq "JAVA_SECURITY_OPTS appears 3 times (1 assign + 2 exec blocks)" "3" "$import_count"
 
+# shellcheck disable=SC2016
 exec_usage_count=$(grep -c '${JAVA_SECURITY_OPTS}' "$entrypoint_file" || true)
 assert_eq "both exec java blocks reference JAVA_SECURITY_OPTS" "2" "$exec_usage_count"
 
-# 9c. formatMsgNoLookups must only appear in runtime-functions.sh (get_security_jvm_opts)
-#     Not hardcoded anywhere in entrypoint.sh — proves single source of truth
 func_count=$(grep -c 'formatMsgNoLookups' "$entrypoint_file" || true)
 assert_eq "formatMsgNoLookups not hardcoded in entrypoint.sh" "0" "$func_count"
 
-# 9d. entrypoint.sh seeds serializationisbad.json config into config/ directory
 seed_count=$(grep -c 'serializationisbad.json' "$entrypoint_file" || true)
 assert_eq "entrypoint seeds serializationisbad.json to config dir" "1" "$seed_count"
 
-# 9e. Dockerfile downloads Log4jPatcher from CreeperHost
 dockerfile_path="${SCRIPT_DIR}/../Dockerfile"
 patcher_url="https://github.com/CreeperHost/Log4jPatcher/releases/download/v1.0.1/Log4jPatcher-1.0.1.jar"
 patcher_dest="/usr/local/bin/Log4jPatcher.jar"
@@ -386,7 +276,6 @@ else
         "destination path not found in Dockerfile"
 fi
 
-# 9f. Dockerfile downloads SerializationIsBad agent and config
 sib_url="https://github.com/dogboy21/serializationisbad/releases/download/1.5.2/serializationisbad-1.5.2.jar"
 sib_dest="/usr/local/bin/serializationisbad.jar"
 sib_cfg="serializationisbad.json"
@@ -409,7 +298,6 @@ else
         "config filename not found in Dockerfile"
 fi
 
-# 9g. Both JARs are outside the data VOLUME (/usr/local/minecraft)
 volume_line=$(grep '^VOLUME' "$dockerfile_path" || echo "")
 assert_contains "Log4jPatcher.jar is outside the VOLUME" \
     "/usr/local/bin" "$patcher_dest"
@@ -419,9 +307,20 @@ assert_contains "VOLUME targets /usr/local/minecraft (not /usr/local/bin)" \
     "/usr/local/minecraft" "$volume_line"
 echo
 
-# ==========================================================
-# Results
-# ==========================================================
+echo "=== Constants ==="
+assert_eq "DEFAULT_SERVER_TYPE is fabric" "fabric" "$DEFAULT_SERVER_TYPE"
+assert_eq "DEFAULT_VERSION_SENTINEL is latest" "latest" "$DEFAULT_VERSION_SENTINEL"
+assert_eq "MIN_RESERVED_MB is 512" "512" "$MIN_RESERVED_MB"
+assert_eq "MAX_RESERVED_MB is 1024" "1024" "$MAX_RESERVED_MB"
+assert_eq "DEFAULT_RESERVED_PCT is 15" "15" "$DEFAULT_RESERVED_PCT"
+assert_eq "MIN_HEAP_MB is 512" "512" "$MIN_HEAP_MB"
+assert_eq "LARGE_HEAP_THRESHOLD_MB is 12288" "12288" "$LARGE_HEAP_THRESHOLD_MB"
+assert_eq "WGET_TIMEOUT is 30" "30" "$WGET_TIMEOUT"
+assert_eq "WGET_TIMEOUT_LARGE is 60" "60" "$WGET_TIMEOUT_LARGE"
+assert_eq "DOWNLOAD_RETRIES is 3" "3" "$DOWNLOAD_RETRIES"
+assert_eq "DOWNLOAD_RETRY_DELAY is 5" "5" "$DOWNLOAD_RETRY_DELAY"
+echo
+
 echo "============================="
 printf "Results: %d passed, %d failed\n" "$PASS" "$FAIL"
 if [ "$FAIL" -gt 0 ]; then

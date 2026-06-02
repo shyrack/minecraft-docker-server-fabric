@@ -2,13 +2,13 @@
 set -euo pipefail
 
 provider_resolve_version() {
-    if [ "${MINECRAFT_VERSION}" = "latest" ]; then
-        MINECRAFT_VERSION=$(wget -T 30 -q -O - "https://launchermeta.mojang.com/mc/game/version_manifest.json" | \
+    if [ "${MINECRAFT_VERSION}" = "${DEFAULT_VERSION_SENTINEL}" ]; then
+        MINECRAFT_VERSION=$(wget -T "${WGET_TIMEOUT}" -q -O - "https://launchermeta.mojang.com/mc/game/version_manifest.json" | \
             jq -r '.latest.release')
     fi
-    if [ "${FORGE_VERSION:-latest}" = "latest" ]; then
+    if [ "${FORGE_VERSION:-${DEFAULT_VERSION_SENTINEL}}" = "${DEFAULT_VERSION_SENTINEL}" ]; then
         local promotions
-        promotions=$(wget -T 30 -q -O - "https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json")
+        promotions=$(wget -T "${WGET_TIMEOUT}" -q -O - "https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json")
         FORGE_VERSION=$(echo "$promotions" | jq -r --arg mc "$MINECRAFT_VERSION" '.promos["\($mc)-recommended"] // .promos["\($mc)-latest"] // empty')
         if [ -z "$FORGE_VERSION" ]; then
             echo "ERROR: No Forge version found for Minecraft ${MINECRAFT_VERSION}" >&2
@@ -26,22 +26,10 @@ provider_download_server() {
         return 0
     fi
 
-    echo "Downloading Forge installer ${FORGE_COMBINED}..."
-    for i in 1 2 3; do
-        wget -T 60 -O "$installer" \
-            "https://maven.minecraftforge.net/net/minecraftforge/forge/${FORGE_COMBINED}/${installer}" \
-            && break
-        echo "Download attempt $i failed, retrying..."
-        sleep 5
-    done
-    if [ ! -s "$installer" ]; then
-        echo "ERROR: Failed to download Forge installer after 3 attempts" >&2
-        return 1
-    fi
-    if ! head -c 2 "$installer" | grep -q 'PK'; then
-        echo "ERROR: Downloaded installer does not appear to be a valid ZIP/JAR" >&2
-        return 1
-    fi
+    download_and_verify_large \
+        "https://maven.minecraftforge.net/net/minecraftforge/forge/${FORGE_COMBINED}/${installer}" \
+        "$installer" \
+        "Forge installer ${FORGE_COMBINED}"
 
     echo "Running Forge installer (this may take a moment)..."
     java -jar "$installer" --installServer || {

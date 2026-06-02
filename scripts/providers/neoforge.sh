@@ -2,16 +2,28 @@
 set -euo pipefail
 
 provider_resolve_version() {
-    if [ "${NEOFORGE_VERSION:-latest}" = "latest" ]; then
-        local metadata
-        metadata=$(wget -T 30 -q -O - "https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml")
-        NEOFORGE_VERSION=$(echo "$metadata" | grep -oP '<release>\K[^<]+')
+    if [ "${NEOFORGE_VERSION:-${DEFAULT_VERSION_SENTINEL}}" != "${DEFAULT_VERSION_SENTINEL}" ]; then
+        if [ "${MINECRAFT_VERSION}" = "${DEFAULT_VERSION_SENTINEL}" ]; then
+            MINECRAFT_VERSION=$(echo "$NEOFORGE_VERSION" | cut -d'-' -f1)
+        fi
+        return 0
+    fi
+
+    local metadata
+    metadata=$(wget -T "${WGET_TIMEOUT}" -q -O - "https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml")
+    if [ "${MINECRAFT_VERSION}" != "${DEFAULT_VERSION_SENTINEL}" ]; then
+        NEOFORGE_VERSION=$(echo "$metadata" | grep -o '<version>[^<]*</version>' | \
+            sed 's/<[^>]*>//g' | grep "^${MINECRAFT_VERSION}-" | sort -V | tail -1)
+        if [ -z "$NEOFORGE_VERSION" ]; then
+            echo "ERROR: No NeoForge version found for Minecraft ${MINECRAFT_VERSION}" >&2
+            return 1
+        fi
+    else
+        NEOFORGE_VERSION=$(echo "$metadata" | sed -n 's/.*<release>\([^<]*\).*/\1/p')
         if [ -z "$NEOFORGE_VERSION" ]; then
             echo "ERROR: Could not resolve latest NeoForge version" >&2
             return 1
         fi
-    fi
-    if [ "${MINECRAFT_VERSION}" = "latest" ]; then
         MINECRAFT_VERSION=$(echo "$NEOFORGE_VERSION" | cut -d'-' -f1)
     fi
 }
@@ -24,22 +36,10 @@ provider_download_server() {
         return 0
     fi
 
-    echo "Downloading NeoForge installer ${NEOFORGE_VERSION}..."
-    for i in 1 2 3; do
-        wget -T 60 -O "$installer" \
-            "https://maven.neoforged.net/releases/net/neoforged/neoforge/${NEOFORGE_VERSION}/${installer}" \
-            && break
-        echo "Download attempt $i failed, retrying..."
-        sleep 5
-    done
-    if [ ! -s "$installer" ]; then
-        echo "ERROR: Failed to download NeoForge installer after 3 attempts" >&2
-        return 1
-    fi
-    if ! head -c 2 "$installer" | grep -q 'PK'; then
-        echo "ERROR: Downloaded installer does not appear to be a valid ZIP/JAR" >&2
-        return 1
-    fi
+    download_and_verify_large \
+        "https://maven.neoforged.net/releases/net/neoforged/neoforge/${NEOFORGE_VERSION}/${installer}" \
+        "$installer" \
+        "NeoForge installer ${NEOFORGE_VERSION}"
 
     echo "Running NeoForge installer (this may take a moment)..."
     java -jar "$installer" --installServer || {

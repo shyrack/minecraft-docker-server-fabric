@@ -22,6 +22,7 @@ RUN adduser -D -h /usr/local/minecraft minecraft
 
 WORKDIR /usr/local/minecraft
 
+COPY scripts/constants.sh /usr/local/bin/constants.sh
 COPY scripts/runtime-functions.sh /usr/local/bin/runtime-functions.sh
 COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY scripts/providers/ /usr/local/bin/providers/

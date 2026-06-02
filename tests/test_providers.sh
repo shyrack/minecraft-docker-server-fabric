@@ -1,10 +1,4 @@
 #!/usr/bin/env bash
-# tests/test_providers.sh — Unit tests for all server provider scripts
-#
-# Run with:  bash tests/test_providers.sh
-#
-# Tests each provider's resolve/download/jar/launch_args functions in isolation
-# by mocking wget with known fixture data.
 set -euo pipefail
 
 PASS=0
@@ -25,10 +19,8 @@ assert_not_empty() {
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROVIDERS="${SCRIPT_DIR}/../scripts/providers"
+RUNTIME="${SCRIPT_DIR}/../scripts/runtime-functions.sh"
 
-# ==========================================================
-# Provider: fabric
-# ==========================================================
 echo "=== Provider: fabric ==="
 
 test_fabric_resolve() {
@@ -45,6 +37,7 @@ test_fabric_resolve() {
                 esac
             }
             export -f wget
+            source "'"$RUNTIME"'" > /dev/null 2>&1
             source "'"$PROVIDERS"'/fabric.sh" > /dev/null 2>&1
             provider_resolve_version > /dev/null 2>&1
             echo "$MINECRAFT_VERSION $FABRIC_LOADER $FABRIC_INSTALLER"
@@ -62,6 +55,7 @@ test_fabric_pinned() {
         bash -c '
             wget() { echo "UNEXPECTED_WGET_CALL"; }
             export -f wget
+            source "'"$RUNTIME"'" > /dev/null 2>&1
             source "'"$PROVIDERS"'/fabric.sh" > /dev/null 2>&1
             provider_resolve_version > /dev/null 2>&1
             echo "$MINECRAFT_VERSION $FABRIC_LOADER $FABRIC_INSTALLER"
@@ -73,13 +67,13 @@ test_fabric_pinned() {
 
 test_fabric_jar() {
     local jar
-    jar=$(bash -c 'source "'"$PROVIDERS"'/fabric.sh" > /dev/null 2>&1; provider_get_jar')
+    jar=$(bash -c "source '${RUNTIME}' > /dev/null 2>&1; source '${PROVIDERS}/fabric.sh' > /dev/null 2>&1; provider_get_jar")
     assert_eq "JAR name is server.jar" "server.jar" "$jar"
 }
 
 test_fabric_launch_args() {
     local args
-    args=$(bash -c 'source "'"$PROVIDERS"'/fabric.sh" > /dev/null 2>&1; provider_get_launch_args')
+    args=$(bash -c "source '${RUNTIME}' > /dev/null 2>&1; source '${PROVIDERS}/fabric.sh' > /dev/null 2>&1; provider_get_launch_args")
     assert_eq "launch args include nogui" "nogui" "$args"
 }
 
@@ -89,9 +83,6 @@ test_fabric_jar
 test_fabric_launch_args
 echo
 
-# ==========================================================
-# Provider: vanilla
-# ==========================================================
 echo "=== Provider: vanilla ==="
 
 test_vanilla_resolve() {
@@ -106,6 +97,7 @@ test_vanilla_resolve() {
             esac
         }
         export -f wget
+        source "'"$RUNTIME"'" > /dev/null 2>&1
         source "'"$PROVIDERS"'/vanilla.sh" > /dev/null 2>&1
         provider_resolve_version > /dev/null 2>&1
         echo "$MINECRAFT_VERSION"
@@ -118,6 +110,7 @@ test_vanilla_pinned() {
     mc=$(MINECRAFT_VERSION=1.21.4 bash -c '
         wget() { echo "UNEXPECTED_WGET: $*"; }
         export -f wget
+        source "'"$RUNTIME"'" > /dev/null 2>&1
         source "'"$PROVIDERS"'/vanilla.sh" > /dev/null 2>&1
         provider_resolve_version > /dev/null 2>&1
         echo "$MINECRAFT_VERSION"
@@ -127,13 +120,13 @@ test_vanilla_pinned() {
 
 test_vanilla_jar() {
     local jar
-    jar=$(bash -c 'source "'"$PROVIDERS"'/vanilla.sh" > /dev/null 2>&1; provider_get_jar')
+    jar=$(bash -c "source '${RUNTIME}' > /dev/null 2>&1; source '${PROVIDERS}/vanilla.sh' > /dev/null 2>&1; provider_get_jar")
     assert_eq "JAR name is server.jar" "server.jar" "$jar"
 }
 
 test_vanilla_launch_args() {
     local args
-    args=$(bash -c 'source "'"$PROVIDERS"'/vanilla.sh" > /dev/null 2>&1; provider_get_launch_args')
+    args=$(bash -c "source '${RUNTIME}' > /dev/null 2>&1; source '${PROVIDERS}/vanilla.sh' > /dev/null 2>&1; provider_get_launch_args")
     assert_eq "launch args include nogui" "nogui" "$args"
 }
 
@@ -156,6 +149,7 @@ test_vanilla_download_url() {
             esac
         }
         export -f wget
+        source "'"$RUNTIME"'" > /dev/null 2>&1
         source "'"$PROVIDERS"'/vanilla.sh" > /dev/null 2>&1
         provider_download_server > /dev/null 2>&1
         [ -f server.jar ] && echo "OK" || echo "FAIL"
@@ -170,9 +164,6 @@ test_vanilla_launch_args
 test_vanilla_download_url
 echo
 
-# ==========================================================
-# Provider: paper
-# ==========================================================
 echo "=== Provider: paper ==="
 
 test_paper_resolve() {
@@ -186,6 +177,7 @@ test_paper_resolve() {
             esac
         }
         export -f wget
+        source "'"$RUNTIME"'" > /dev/null 2>&1
         source "'"$PROVIDERS"'/paper.sh" > /dev/null 2>&1
         provider_resolve_version > /dev/null 2>&1
         echo "$MINECRAFT_VERSION $PAPER_BUILD"
@@ -199,6 +191,7 @@ test_paper_pinned() {
     result=$(MINECRAFT_VERSION=1.21.4 PAPER_BUILD=150 bash -c '
         wget() { echo "UNEXPECTED_WGET: $*"; }
         export -f wget
+        source "'"$RUNTIME"'" > /dev/null 2>&1
         source "'"$PROVIDERS"'/paper.sh" > /dev/null 2>&1
         provider_resolve_version > /dev/null 2>&1
         echo "$MINECRAFT_VERSION $PAPER_BUILD"
@@ -209,13 +202,13 @@ test_paper_pinned() {
 
 test_paper_jar() {
     local jar
-    jar=$(bash -c 'source "'"$PROVIDERS"'/paper.sh" > /dev/null 2>&1; provider_get_jar')
+    jar=$(bash -c "source '${RUNTIME}' > /dev/null 2>&1; source '${PROVIDERS}/paper.sh' > /dev/null 2>&1; provider_get_jar")
     assert_eq "JAR name is paper.jar" "paper.jar" "$jar"
 }
 
 test_paper_launch_args() {
     local args
-    args=$(bash -c 'source "'"$PROVIDERS"'/paper.sh" > /dev/null 2>&1; provider_get_launch_args')
+    args=$(bash -c "source '${RUNTIME}' > /dev/null 2>&1; source '${PROVIDERS}/paper.sh' > /dev/null 2>&1; provider_get_launch_args")
     assert_eq "launch args include nogui" "nogui" "$args"
 }
 
@@ -225,9 +218,6 @@ test_paper_jar
 test_paper_launch_args
 echo
 
-# ==========================================================
-# Provider: spigot
-# ==========================================================
 echo "=== Provider: spigot ==="
 
 test_spigot_resolve() {
@@ -242,6 +232,7 @@ test_spigot_resolve() {
             esac
         }
         export -f wget
+        source "'"$RUNTIME"'" > /dev/null 2>&1
         source "'"$PROVIDERS"'/spigot.sh" > /dev/null 2>&1
         provider_resolve_version > /dev/null 2>&1
         echo "$MINECRAFT_VERSION"
@@ -254,6 +245,7 @@ test_spigot_pinned() {
     mc=$(MINECRAFT_VERSION=1.21.4 bash -c '
         wget() { echo "UNEXPECTED_WGET: $*"; }
         export -f wget
+        source "'"$RUNTIME"'" > /dev/null 2>&1
         source "'"$PROVIDERS"'/spigot.sh" > /dev/null 2>&1
         provider_resolve_version > /dev/null 2>&1
         echo "$MINECRAFT_VERSION"
@@ -263,13 +255,13 @@ test_spigot_pinned() {
 
 test_spigot_jar() {
     local jar
-    jar=$(bash -c 'source "'"$PROVIDERS"'/spigot.sh" > /dev/null 2>&1; provider_get_jar')
+    jar=$(bash -c "source '${RUNTIME}' > /dev/null 2>&1; source '${PROVIDERS}/spigot.sh' > /dev/null 2>&1; provider_get_jar")
     assert_eq "JAR name is spigot.jar" "spigot.jar" "$jar"
 }
 
 test_spigot_launch_args() {
     local args
-    args=$(bash -c 'source "'"$PROVIDERS"'/spigot.sh" > /dev/null 2>&1; provider_get_launch_args')
+    args=$(bash -c "source '${RUNTIME}' > /dev/null 2>&1; source '${PROVIDERS}/spigot.sh' > /dev/null 2>&1; provider_get_launch_args")
     assert_eq "launch args include nogui" "nogui" "$args"
 }
 
@@ -279,9 +271,6 @@ test_spigot_jar
 test_spigot_launch_args
 echo
 
-# ==========================================================
-# Provider: forge
-# ==========================================================
 echo "=== Provider: forge ==="
 
 test_forge_resolve() {
@@ -299,6 +288,7 @@ test_forge_resolve() {
             esac
         }
         export -f wget
+        source "'"$RUNTIME"'" > /dev/null 2>&1
         source "'"$PROVIDERS"'/forge.sh" > /dev/null 2>&1
         provider_resolve_version > /dev/null 2>&1
         echo "$MINECRAFT_VERSION $FORGE_VERSION $FORGE_COMBINED"
@@ -313,6 +303,7 @@ test_forge_pinned() {
     result=$(MINECRAFT_VERSION=1.21.4 FORGE_VERSION=53.5.0 bash -c '
         wget() { echo "UNEXPECTED_WGET: $*"; }
         export -f wget
+        source "'"$RUNTIME"'" > /dev/null 2>&1
         source "'"$PROVIDERS"'/forge.sh" > /dev/null 2>&1
         provider_resolve_version > /dev/null 2>&1
         echo "$MINECRAFT_VERSION $FORGE_VERSION $FORGE_COMBINED"
@@ -324,16 +315,17 @@ test_forge_pinned() {
 
 test_forge_jar() {
     local jar
-    jar=$(bash -c 'source "'"$PROVIDERS"'/forge.sh" > /dev/null 2>&1; provider_get_jar')
+    jar=$(bash -c "source '${RUNTIME}' > /dev/null 2>&1; source '${PROVIDERS}/forge.sh' > /dev/null 2>&1; provider_get_jar")
     assert_eq "forge JAR name is empty" "" "$jar"
 }
 
 test_forge_launch_args() {
     local args
-    args=$(FORGE_COMBINED=1.25.0-54.0.0 bash -c '
-        source "'"$PROVIDERS"'/forge.sh" > /dev/null 2>&1
+    args=$(FORGE_COMBINED=1.25.0-54.0.0 bash -c "
+        source '${RUNTIME}' > /dev/null 2>&1
+        source '${PROVIDERS}/forge.sh' > /dev/null 2>&1
         provider_get_launch_args
-    ')
+    ")
     assert_eq "forge launch args contain unix_args.txt" \
         "@libraries/net/minecraftforge/forge/1.25.0-54.0.0/unix_args.txt nogui" "$args"
 }
@@ -344,9 +336,6 @@ test_forge_jar
 test_forge_launch_args
 echo
 
-# ==========================================================
-# Provider: neoforge
-# ==========================================================
 echo "=== Provider: neoforge ==="
 
 test_neoforge_resolve() {
@@ -361,6 +350,7 @@ test_neoforge_resolve() {
             esac
         }
         export -f wget
+        source "'"$RUNTIME"'" > /dev/null 2>&1
         source "'"$PROVIDERS"'/neoforge.sh" > /dev/null 2>&1
         provider_resolve_version > /dev/null 2>&1
         echo "$MINECRAFT_VERSION $NEOFORGE_VERSION"
@@ -374,6 +364,7 @@ test_neoforge_pinned() {
     result=$(MINECRAFT_VERSION=1.21.4 NEOFORGE_VERSION=1.21.4-3.0.16 bash -c '
         wget() { echo "UNEXPECTED_WGET: $*"; }
         export -f wget
+        source "'"$RUNTIME"'" > /dev/null 2>&1
         source "'"$PROVIDERS"'/neoforge.sh" > /dev/null 2>&1
         provider_resolve_version > /dev/null 2>&1
         echo "$MINECRAFT_VERSION $NEOFORGE_VERSION"
@@ -382,31 +373,51 @@ test_neoforge_pinned() {
     assert_eq "pinned neoforge version" "1.21.4-3.0.16" "$(echo "$result" | awk '{print $2}')"
 }
 
+test_neoforge_pinned_mc_with_latest_neoforge() {
+    local result
+    result=$(MINECRAFT_VERSION=1.21.4 NEOFORGE_VERSION=latest bash -c '
+        wget() {
+            case "$*" in
+                *maven-metadata.xml*)
+                    echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?><metadata><groupId>net.neoforged</groupId><artifactId>neoforge</artifactId><versioning><release>1.25.0-3.5.18</release><versions><version>1.21.4-3.0.16</version><version>1.21.4-3.0.17</version><version>1.25.0-3.5.16</version><version>1.25.0-3.5.18</version></versions></versioning></metadata>"
+                    ;;
+                *) echo "UNEXPECTED_WGET: $*" ;;
+            esac
+        }
+        export -f wget
+        source "'"$RUNTIME"'" > /dev/null 2>&1
+        source "'"$PROVIDERS"'/neoforge.sh" > /dev/null 2>&1
+        provider_resolve_version > /dev/null 2>&1
+        echo "$MINECRAFT_VERSION $NEOFORGE_VERSION"
+    ')
+    assert_eq "pinned MC with latest NEOFORGE keeps MC version" "1.21.4" "$(echo "$result" | awk '{print $1}')"
+    assert_eq "pinned MC with latest NEOFORGE resolves correct neoforge" "1.21.4-3.0.17" "$(echo "$result" | awk '{print $2}')"
+}
+
 test_neoforge_jar() {
     local jar
-    jar=$(bash -c 'source "'"$PROVIDERS"'/neoforge.sh" > /dev/null 2>&1; provider_get_jar')
+    jar=$(bash -c "source '${RUNTIME}' > /dev/null 2>&1; source '${PROVIDERS}/neoforge.sh' > /dev/null 2>&1; provider_get_jar")
     assert_eq "neoforge JAR name is empty" "" "$jar"
 }
 
 test_neoforge_launch_args() {
     local args
-    args=$(NEOFORGE_VERSION=1.25.0-3.5.18 bash -c '
-        source "'"$PROVIDERS"'/neoforge.sh" > /dev/null 2>&1
+    args=$(NEOFORGE_VERSION=1.25.0-3.5.18 bash -c "
+        source '${RUNTIME}' > /dev/null 2>&1
+        source '${PROVIDERS}/neoforge.sh' > /dev/null 2>&1
         provider_get_launch_args
-    ')
+    ")
     assert_eq "neoforge launch args contain unix_args.txt" \
         "@libraries/net/neoforged/neoforge/1.25.0-3.5.18/unix_args.txt nogui" "$args"
 }
 
 test_neoforge_resolve
 test_neoforge_pinned
+test_neoforge_pinned_mc_with_latest_neoforge
 test_neoforge_jar
 test_neoforge_launch_args
 echo
 
-# ==========================================================
-# Results
-# ==========================================================
 echo "============================="
 printf "Results: %d passed, %d failed\n" "$PASS" "$FAIL"
 if [ "$FAIL" -gt 0 ]; then

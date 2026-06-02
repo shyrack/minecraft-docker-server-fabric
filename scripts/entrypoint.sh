@@ -5,7 +5,7 @@ SCRIPTS_DIR="$(dirname "$0")"
 # shellcheck source=scripts/runtime-functions.sh
 . "${SCRIPTS_DIR}/runtime-functions.sh"
 
-SERVER_TYPE="${SERVER_TYPE:-fabric}"
+SERVER_TYPE="${SERVER_TYPE:-${DEFAULT_SERVER_TYPE}}"
 PROVIDER_FILE="${SCRIPTS_DIR}/providers/${SERVER_TYPE}.sh"
 
 if [ ! -f "$PROVIDER_FILE" ]; then
@@ -18,85 +18,22 @@ fi
 . "$PROVIDER_FILE"
 
 provider_resolve_version
-
 provider_download_server
 
-if [ "${EULA:-}" = "TRUE" ]; then
-    echo "eula=true" > eula.txt
-else
-    echo "You must accept the Minecraft EULA to run this server." >&2
-    echo "Set the environment variable EULA=TRUE to indicate acceptance." >&2
-    echo "The EULA can be found at: https://aka.ms/MinecraftEULA" >&2
-    exit 1
-fi
+check_eula || exit 1
 
 if [ -n "${MEMORY:-}" ]; then
     HEAP_SIZE="$MEMORY"
 else
     LIMIT_MB=$(read_limit_mb)
-    if [ -n "${SYSTEM_RESERVED:-}" ]; then
-        RESERVED_MB=$(parse_mb "$SYSTEM_RESERVED")
-    else
-        RESERVED_MB=$(( LIMIT_MB * 15 / 100 ))
-        [ "$RESERVED_MB" -lt 512 ] && RESERVED_MB=512
-        [ "$RESERVED_MB" -gt 1024 ] && RESERVED_MB=1024
-    fi
-    HEAP_MB=$(( LIMIT_MB - RESERVED_MB ))
-    [ "$HEAP_MB" -lt 512 ] && HEAP_MB=512
-    HEAP_SIZE="${HEAP_MB}M"
+    HEAP_SIZE=$(calculate_heap_size "" "$LIMIT_MB")
 fi
 
 : "${INIT_MEMORY=${HEAP_SIZE}}"
 : "${MAX_MEMORY=${HEAP_SIZE}}"
 
-JAVA_MEM_ARGS=""
-if is_percentage "$INIT_MEMORY"; then
-    JAVA_MEM_ARGS="$JAVA_MEM_ARGS -XX:InitialRAMPercentage=${INIT_MEMORY%\%}"
-else
-    JAVA_MEM_ARGS="$JAVA_MEM_ARGS -Xms${INIT_MEMORY}"
-fi
-if is_percentage "$MAX_MEMORY"; then
-    JAVA_MEM_ARGS="$JAVA_MEM_ARGS -XX:MaxRAMPercentage=${MAX_MEMORY%\%}"
-else
-    JAVA_MEM_ARGS="$JAVA_MEM_ARGS -Xmx${MAX_MEMORY}"
-fi
-
-A_HEAP=8M
-A_NEW=30
-A_MAX_NEW=40
-A_RESERVE=20
-A_MIXED=4
-A_IHOP=15
-A_RSET=5
-if ! is_percentage "$MAX_MEMORY"; then
-    FLAGS_MB=$(parse_mb "$MAX_MEMORY" 2>/dev/null || echo 0)
-else
-    FLAGS_MB=0
-fi
-if [ "$FLAGS_MB" -ge 12288 ]; then
-    A_HEAP=16M
-    A_NEW=40
-    A_MAX_NEW=50
-    A_RESERVE=15
-    A_IHOP=20
-fi
-
-GC_FLAGS="-XX:+AlwaysPreTouch \
--XX:+DisableExplicitGC \
--XX:+PerfDisableSharedMem \
--XX:+UnlockExperimentalVMOptions \
--XX:G1HeapRegionSize=${A_HEAP} \
--XX:G1HeapWastePercent=5 \
--XX:G1MaxNewSizePercent=${A_MAX_NEW} \
--XX:G1MixedGCCountTarget=${A_MIXED} \
--XX:G1MixedGCLiveThresholdPercent=90 \
--XX:G1NewSizePercent=${A_NEW} \
--XX:G1RSetUpdatingPauseTimePercent=${A_RSET} \
--XX:G1ReservePercent=${A_RESERVE} \
--XX:InitiatingHeapOccupancyPercent=${A_IHOP} \
--XX:MaxGCPauseMillis=200 \
--Dusing.aikars.flags=https://flags.sh \
--Daikars.new.flags=true"
+JAVA_MEM_ARGS=$(build_java_memory_args "$INIT_MEMORY" "$MAX_MEMORY")
+GC_FLAGS=$(build_gc_flags "$MAX_MEMORY")
 
 CUSTOM_JVM_FLAGS="${JVM_XX_OPTS:-} ${JVM_OPTS:-}"
 JAVA_SECURITY_OPTS=$(get_security_jvm_opts)

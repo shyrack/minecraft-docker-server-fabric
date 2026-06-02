@@ -23,7 +23,7 @@ The image is automatically built and published to the GitHub Container Registry 
      -v ./minecraft-data:/usr/local/minecraft \
      -e EULA=TRUE \
      -e SERVER_TYPE=paper \
-     ghcr.io/shyrack/minecraft-docker-server-fabric:latest
+      ghcr.io/shyrack/dockered-minecraft-server:latest
    ```
 
 > [!IMPORTANT]
