@@ -46,6 +46,11 @@ JAVA_MEM_ARGS="-Xms${HEAP_SIZE} -Xmx${HEAP_SIZE}"
 SERVER_JAR=$(provider_get_jar)
 LAUNCH_ARGS=$(provider_get_launch_args)
 
+STDIN_PIPE="/tmp/minecraft-stdin"
+mkfifo -m 666 "$STDIN_PIPE" 2>/dev/null || true
+sleep infinity > "$STDIN_PIPE" &
+trap 'rm -f "$STDIN_PIPE"' EXIT
+
 if [ -n "$SERVER_JAR" ]; then
     # shellcheck disable=SC2086
     exec java \
@@ -66,7 +71,7 @@ if [ -n "$SERVER_JAR" ]; then
         -XX:MaxGCPauseMillis=200 \
         -Dusing.aikars.flags=https://flags.sh \
         -Daikars.new.flags=true \
-        -jar "$SERVER_JAR" $LAUNCH_ARGS
+        -jar "$SERVER_JAR" $LAUNCH_ARGS < "$STDIN_PIPE"
 else
     # shellcheck disable=SC2086
     exec java \
@@ -87,5 +92,5 @@ else
         -XX:MaxGCPauseMillis=200 \
         -Dusing.aikars.flags=https://flags.sh \
         -Daikars.new.flags=true \
-        $LAUNCH_ARGS
+        $LAUNCH_ARGS < "$STDIN_PIPE"
 fi

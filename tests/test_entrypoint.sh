@@ -180,6 +180,89 @@ assert_eq "8G limit, 5G reserved → 3072M" "3072M" "$(calculate_heap "" "5G" 81
 echo
 
 # ==========================================================
+# 5. Named pipe (stdin pipe)
+# ==========================================================
+# Tests the FIFO creation and data flow used for sending
+# commands to the Minecraft server via docker exec.
+
+echo "=== stdin pipe ==="
+
+pipe_tmp="$(mktemp -d)"
+pipe_cleanup() { rm -rf "$pipe_tmp" "$TMP"; }
+trap pipe_cleanup EXIT
+
+# 5a. FIFO is created and is a named pipe
+mkfifo -m 666 "$pipe_tmp/minecraft-stdin" 2>/dev/null || true
+if test -p "$pipe_tmp/minecraft-stdin"; then result="ok"; else result="fail"; fi
+assert_eq "FIFO is a named pipe" "ok" "$result"
+
+# 5b. FIFO permissions
+fifo_perms=$(stat -c "%a" "$pipe_tmp/minecraft-stdin")
+assert_eq "FIFO has 666 permissions" "666" "$fifo_perms"
+
+rm -f "$pipe_tmp/minecraft-stdin"
+
+# 5c. Data flows through pipe
+mkfifo "$pipe_tmp/minecraft-stdin"
+sleep infinity > "$pipe_tmp/minecraft-stdin" &
+writer_pid=$!
+cat "$pipe_tmp/minecraft-stdin" > "$pipe_tmp/output" &
+reader_pid=$!
+echo "test command" > "$pipe_tmp/minecraft-stdin"
+sleep 0.5
+kill $reader_pid $writer_pid 2>/dev/null || true
+wait $reader_pid 2>/dev/null || true
+wait $writer_pid 2>/dev/null || true
+if grep -q "test command" "$pipe_tmp/output"; then result="ok"; else result="fail"; fi
+assert_eq "Data written to pipe is readable" "ok" "$result"
+
+rm -f "$pipe_tmp/minecraft-stdin" "$pipe_tmp/output"
+
+# 5d. Multiple commands flow through without EOF
+mkfifo "$pipe_tmp/minecraft-stdin"
+sleep infinity > "$pipe_tmp/minecraft-stdin" &
+writer_pid=$!
+cat "$pipe_tmp/minecraft-stdin" > "$pipe_tmp/output" &
+reader_pid=$!
+echo "cmd1" > "$pipe_tmp/minecraft-stdin"
+sleep 0.2
+echo "cmd2" > "$pipe_tmp/minecraft-stdin"
+sleep 0.2
+echo "cmd3" > "$pipe_tmp/minecraft-stdin"
+sleep 0.5
+kill $reader_pid $writer_pid 2>/dev/null || true
+wait $reader_pid 2>/dev/null || true
+wait $writer_pid 2>/dev/null || true
+line_count=$(grep -c "^cmd" "$pipe_tmp/output" 2>/dev/null || echo 0)
+assert_eq "Multiple commands flow through without EOF" "3" "$line_count"
+
+rm -f "$pipe_tmp/minecraft-stdin" "$pipe_tmp/output"
+
+# 5e. Pipe survives closing writers (sleep infinity keeps it open)
+mkfifo "$pipe_tmp/minecraft-stdin"
+sleep infinity > "$pipe_tmp/minecraft-stdin" &
+writer_pid=$!
+(
+    while read -r line; do
+        echo "$line" >> "$pipe_tmp/output"
+    done < "$pipe_tmp/minecraft-stdin"
+) &
+reader_pid=$!
+echo "first" > "$pipe_tmp/minecraft-stdin"
+sleep 0.2
+echo "second" > "$pipe_tmp/minecraft-stdin"
+sleep 0.2
+kill $reader_pid 2>/dev/null || true
+wait $reader_pid 2>/dev/null || true
+kill $writer_pid 2>/dev/null || true
+wait $writer_pid 2>/dev/null || true
+line_count=$(grep -c "." "$pipe_tmp/output" 2>/dev/null || echo 0)
+assert_eq "Commands flow through with persistent writer" "2" "$line_count"
+
+rm -f "$pipe_tmp/minecraft-stdin" "$pipe_tmp/output"
+echo
+
+# ==========================================================
 # Results
 # ==========================================================
 echo "============================="
