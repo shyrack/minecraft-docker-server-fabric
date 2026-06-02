@@ -116,12 +116,52 @@ minecraft-data/
 
 ### Memory
 
-By default, the container auto-detects the available memory (respecting Docker memory limits) and reserves 1 GB for the operating system. You can control this with:
+By default, the container auto-detects the available memory (respecting Docker memory limits)
+and reserves a dynamic amount for the OS/JVM non-heap overhead:
+
+- **15% of container limit** when that falls between 512 MB and 1 GB
+- **Minimum 512 MB** (for small containers; heap is also floor-clamped to 512 MB)
+- **Maximum 1 GB** (for containers above ~7 GB)
+
+You can override the reservation by explicitly setting `SYSTEM_RESERVED`.
 
 | Environment Variable | Default | Description |
 |-----------------------|--------|-------------|
-| `MEMORY` | (auto) | Heap size in Java format, e.g. `4G` or `2048M` |
-| `SYSTEM_RESERVED` | `1G` | Memory reserved for the OS when `MEMORY` is unset |
+| `MEMORY` | (auto) | Heap size, e.g. `4G`, `2048M`, or `75%` for percentage-based |
+| `INIT_MEMORY` | `MEMORY` | Initial heap size (separate from max) |
+| `MAX_MEMORY` | `MEMORY` | Maximum heap size (separate from init) |
+| `SYSTEM_RESERVED` | dynamic | Memory reserved for OS/JVM non-heap. Only used when `MEMORY` is unset (auto-detect). Defaults to 15% of container limit, clamped to [512 MB, 1 GB]. Set explicitly to override. |
+| `JVM_OPTS` | (none) | Extra JVM options (e.g. `-Dfml.queryResult=confirm`) |
+| `JVM_XX_OPTS` | (none) | Extra `-XX` JVM options (e.g. `-XX:+UseLargePages`) |
+
+| Container limit | Reserved (dynamic default) | Java heap |
+|------------------|---------------------------|-----------|
+| 1 GB | 512 MB | 512 MB |
+| 2 GB | 512 MB | 1.5 GB |
+| 3 GB | 512 MB | 2.5 GB |
+| 4 GB | 614 MB | 3.4 GB |
+| 6 GB | 921 MB | 5.1 GB |
+| 8 GB | 1 GB | 7 GB |
+| 16 GB | 1 GB | 15 GB |
+
+**Examples:**
+
+```bash
+# Fixed 4 GB heap
+-e MEMORY=4G
+
+# Separate init and max heap
+-e INIT_MEMORY=1G -e MAX_MEMORY=4G
+
+# Percentage-based (75% of container memory limit)
+-e MEMORY=75%
+
+# Custom JVM options
+-e JVM_OPTS="-Dfml.queryResult=confirm"
+```
+
+The container automatically tunes G1 GC flags (Aikar's flags) based on heap size
+(standard variant for <12 GB, >12 GB variant for larger heaps).
 
 ### EULA
 

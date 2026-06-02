@@ -6,6 +6,13 @@ USER root
 RUN apk add --no-cache bash gcompat jq netcat-openbsd && \
     apk upgrade --no-cache
 
+RUN wget -q -O /usr/local/bin/Log4jPatcher.jar \
+    https://github.com/CreeperHost/Log4jPatcher/releases/download/v1.0.1/Log4jPatcher-1.0.1.jar && \
+    wget -q -O /usr/local/bin/serializationisbad.jar \
+    https://github.com/dogboy21/serializationisbad/releases/download/1.5.2/serializationisbad-1.5.2.jar && \
+    wget -q -O /usr/local/bin/serializationisbad.json \
+    https://raw.githubusercontent.com/dogboy21/serializationisbad/master/serializationisbad.json
+
 ARG MINECRAFT_VERSION=latest
 
 ENV MINECRAFT_VERSION=${MINECRAFT_VERSION} \

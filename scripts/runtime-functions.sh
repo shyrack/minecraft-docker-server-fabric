@@ -12,6 +12,10 @@ parse_mb() {
     esac
 }
 
+is_percentage() {
+    [[ "${1:-}" == *% ]]
+}
+
 read_limit_mb() {
     local cgv2="${1:-/sys/fs/cgroup/memory.max}"
     local cgv1="${2:-/sys/fs/cgroup/memory/memory.limit_in_bytes}"
@@ -26,4 +30,8 @@ read_limit_mb() {
         [ "$val" -lt 9223372036854771712 ] 2>/dev/null && echo $(( val / 1048576 )) && return
     fi
     awk '/MemTotal/ {print int($2 / 1024)}' "$meminfo"
+}
+
+get_security_jvm_opts() {
+    echo "-Dlog4j2.formatMsgNoLookups=true -javaagent:/usr/local/bin/Log4jPatcher.jar -javaagent:/usr/local/bin/serializationisbad.jar"
 }
