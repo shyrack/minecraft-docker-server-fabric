@@ -122,7 +122,7 @@ build_java_memory_args() {
     echo "${args# }"
 }
 
-build_gc_flags() {
+build_g1gc_flags() {
     local max_mem="$1"
 
     local a_heap=8M a_new=30 a_max_new=40 a_reserve=20 a_mixed=4 a_ihop=15 a_rset=5
@@ -154,4 +154,25 @@ build_gc_flags() {
 -XX:MaxGCPauseMillis=200 \
 -Dusing.aikars.flags=https://flags.sh \
 -Daikars.new.flags=true"
+}
+
+build_zgc_flags() {
+    echo "-XX:+UseZGC \
+-XX:+AlwaysPreTouch \
+-XX:+DisableExplicitGC \
+-XX:+PerfDisableSharedMem"
+}
+
+build_gc_flags() {
+    local max_mem="$1"
+    local gc_type="${GC_TYPE:-zgc}"
+
+    case "$gc_type" in
+        zgc)  build_zgc_flags ;;
+        g1gc) build_g1gc_flags "$max_mem" ;;
+        *)
+            echo "WARNING: Unknown GC_TYPE '${gc_type}'. Falling back to ZGC." >&2
+            build_zgc_flags
+            ;;
+    esac
 }

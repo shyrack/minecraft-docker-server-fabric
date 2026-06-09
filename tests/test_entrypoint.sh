@@ -152,16 +152,35 @@ assert_eq "mixed: percentage init + absolute max" \
     "-XX:InitialRAMPercentage=50 -Xmx4G" "$(build_java_memory_args "50%" "4G")"
 echo
 
-echo "=== build_gc_flags ==="
-assert_contains "4G → standard flags"  "G1HeapRegionSize=8M"  "$(build_gc_flags "4G")"
-assert_contains "4G → standard flags"  "G1NewSizePercent=30"  "$(build_gc_flags "4G")"
-assert_contains "8G → standard flags"  "G1HeapRegionSize=8M"  "$(build_gc_flags "8G")"
-assert_contains "10G → standard flags" "G1HeapRegionSize=8M"  "$(build_gc_flags "10G")"
-assert_contains "12G → >12GB flags"   "G1HeapRegionSize=16M" "$(build_gc_flags "12G")"
-assert_contains "12G → >12GB flags"   "G1NewSizePercent=40"  "$(build_gc_flags "12G")"
-assert_contains "16G → >12GB flags"   "G1HeapRegionSize=16M" "$(build_gc_flags "16G")"
-assert_contains "12884901888 bytes (12G) → >12GB" "G1HeapRegionSize=16M" "$(build_gc_flags "12884901888")"
-assert_contains "percentage → standard (unknown size)" "G1HeapRegionSize=8M" "$(build_gc_flags "75%")"
+echo "=== build_gc_flags (default: ZGC) ==="
+zgc_default=$(build_gc_flags "4G")
+assert_contains "default → UseZGC"               "-XX:+UseZGC"               "$zgc_default"
+assert_contains "default → AlwaysPreTouch"        "-XX:+AlwaysPreTouch"       "$zgc_default"
+assert_contains "default → DisableExplicitGC"     "-XX:+DisableExplicitGC"    "$zgc_default"
+assert_contains "default → PerfDisableSharedMem"  "-XX:+PerfDisableSharedMem" "$zgc_default"
+if [[ "$zgc_default" != *"-XX:G1"* ]]; then pass "default → no G1 flags"; else fail "default → no G1 flags" "unexpected G1 flags in ZGC output: $zgc_default"; fi
+
+echo "=== build_gc_flags (GC_TYPE=zgc) ==="
+zgc_explicit=$(GC_TYPE=zgc build_gc_flags "4G")
+assert_contains "zgc → UseZGC"              "-XX:+UseZGC"              "$zgc_explicit"
+assert_contains "zgc → AlwaysPreTouch"      "-XX:+AlwaysPreTouch"      "$zgc_explicit"
+assert_contains "zgc → DisableExplicitGC"   "-XX:+DisableExplicitGC"   "$zgc_explicit"
+
+echo "=== build_gc_flags (GC_TYPE=g1gc) ==="
+assert_contains "4G → standard flags"  "G1HeapRegionSize=8M"  "$(GC_TYPE=g1gc build_gc_flags "4G")"
+assert_contains "4G → standard flags"  "G1NewSizePercent=30"  "$(GC_TYPE=g1gc build_gc_flags "4G")"
+assert_contains "8G → standard flags"  "G1HeapRegionSize=8M"  "$(GC_TYPE=g1gc build_gc_flags "8G")"
+assert_contains "10G → standard flags" "G1HeapRegionSize=8M"  "$(GC_TYPE=g1gc build_gc_flags "10G")"
+assert_contains "12G → >12GB flags"   "G1HeapRegionSize=16M" "$(GC_TYPE=g1gc build_gc_flags "12G")"
+assert_contains "12G → >12GB flags"   "G1NewSizePercent=40"  "$(GC_TYPE=g1gc build_gc_flags "12G")"
+assert_contains "16G → >12GB flags"   "G1HeapRegionSize=16M" "$(GC_TYPE=g1gc build_gc_flags "16G")"
+assert_contains "12884901888 bytes (12G) → >12GB" "G1HeapRegionSize=16M" "$(GC_TYPE=g1gc build_gc_flags "12884901888")"
+assert_contains "percentage → standard (unknown size)" "G1HeapRegionSize=8M" "$(GC_TYPE=g1gc build_gc_flags "75%")"
+
+echo "=== build_gc_flags (GC_TYPE=unknown → fallback ZGC) ==="
+unknown_fallback=$(GC_TYPE=badgarbage build_gc_flags "4G" 2>&1)
+assert_contains "unknown → warns"             "WARNING"            "$unknown_fallback"
+assert_contains "unknown → falls back to ZGC" "-XX:+UseZGC"       "$unknown_fallback"
 echo
 
 echo "=== stdin pipe ==="

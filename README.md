@@ -133,6 +133,7 @@ You can override the reservation by explicitly setting `SYSTEM_RESERVED`.
 | `SYSTEM_RESERVED` | dynamic | Memory reserved for OS/JVM non-heap. Only used when `MEMORY` is unset (auto-detect). Defaults to 15% of container limit, clamped to [512 MB, 1 GB]. Set explicitly to override. |
 | `JVM_OPTS` | (none) | Extra JVM options (e.g. `-Dfml.queryResult=confirm`) |
 | `JVM_XX_OPTS` | (none) | Extra `-XX` JVM options (e.g. `-XX:+UseLargePages`) |
+| `GC_TYPE` | `zgc` | Garbage collector: `zgc` (Z Garbage Collector) or `g1gc` (G1GC with Aikar's flags) |
 
 | Container limit | Reserved (dynamic default) | Java heap |
 |------------------|---------------------------|-----------|
@@ -160,7 +161,9 @@ You can override the reservation by explicitly setting `SYSTEM_RESERVED`.
 -e JVM_OPTS="-Dfml.queryResult=confirm"
 ```
 
-The container automatically tunes G1 GC flags (Aikar's flags) based on heap size
+The container defaults to **ZGC** (Z Garbage Collector), which provides sub-millisecond
+pause times and is the recommended GC for modern Minecraft servers on JDK 21+.
+Set `GC_TYPE=g1gc` to use the classic Aikar-tuned G1GC instead
 (standard variant for <12 GB, >12 GB variant for larger heaps).
 
 ### EULA
